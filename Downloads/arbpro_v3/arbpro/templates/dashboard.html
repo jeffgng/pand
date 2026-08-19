@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="page-title">Tableau de Bord</div>
+<div class="page-sub">Synthèse de vos performances d'arbitrage</div>
+
+{% if stats.total_opps == 0 %}
+<div class="card empty-state">
+  <div class="icon">📈</div>
+  <div class="title">PAS ENCORE DE DONNÉES</div>
+  <div class="sub">Sauvegardez des opportunités depuis le Calculateur pour voir vos stats</div>
+</div>
+
+{% else %}
+
+<!-- KPIs -->
+<div class="grid-4 mb-16">
+  <div class="card" style="text-align:center">
+    <div class="text-xs text-dim mb-8">OPPORTUNITÉS</div>
+    <div class="display text-blue" style="font-size:32px">{{ stats.total_opps }}</div>
+  </div>
+  <div class="card" style="text-align:center">
+    <div class="text-xs text-dim mb-8">CAPITAL ENGAGÉ</div>
+    <div class="display" style="font-size:28px">{{ "%.0f €"|format(stats.capital_total) }}</div>
+  </div>
+  <div class="card" style="text-align:center;border-color:rgba(0,230,118,.2)">
+    <div class="text-xs text-dim mb-8">PROFIT NET TOTAL</div>
+    <div class="display text-green" style="font-size:28px">+{{ "%.2f €"|format(stats.profit_total) }}</div>
+  </div>
+  <div class="card" style="text-align:center;border-color:rgba(0,230,118,.2)">
+    <div class="text-xs text-dim mb-8">ROI MOYEN</div>
+    <div class="display text-green" style="font-size:28px">+{{ "%.3f"|format(stats.roi_moyen) }}%</div>
+  </div>
+</div>
+
+<!-- Graphiques -->
+<div class="grid-2 mb-16">
+
+  <!-- Profit cumulé -->
+  <div class="card">
+    <div class="card-label">PROFIT CUMULÉ (€)</div>
+    <canvas id="chart-profit" height="160"></canvas>
+  </div>
+
+  <!-- Marchés -->
+  <div class="card">
+    <div class="card-label">RÉPARTITION DES MARCHÉS</div>
+    <canvas id="chart-marches" height="160"></canvas>
+  </div>
+
+</div>
+
+<!-- Meilleure opportunité -->
+{% if stats.meilleure %}
+<div class="card mb-16" style="border-color:rgba(79,110,247,.25)">
+  <div class="card-label text-blue">🏆 MEILLEURE OPPORTUNITÉ</div>
+  <div class="flex-between wrap gap-16">
+    <div>
+      <div class="bold mb-4">{{ stats.meilleure.evenement }}</div>
+      <div class="text-xs text-dim">
+        <span class="badge badge-blue">{{ stats.meilleure.marche }}</span>
+        {{ stats.meilleure.date }}
+      </div>
+    </div>
+    <div class="flex gap-20">
+      <div style="text-align:right">
+        <div class="text-xs text-dim mb-4">MISE</div>
+        <div>{{ "%.2f €"|format(stats.meilleure.mise_totale) }}</div>
+      </div>
+      <div style="text-align:right">
+        <div class="text-xs text-dim mb-4">PROFIT</div>
+        <div class="text-green bold text-lg">+{{ "%.2f €"|format(stats.meilleure.profit_eur) }}</div>
+      </div>
+      <div style="text-align:right">
+        <div class="text-xs text-dim mb-4">ROI</div>
+        <div class="display text-green" style="font-size:22px">+{{ "%.3f"|format(stats.meilleure.profit_pct) }}%</div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- Top 5 -->
+<div class="card">
+  <div class="card-label">DERNIÈRES OPPORTUNITÉS</div>
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>ÉVÉNEMENT</th><th>MARCHÉ</th><th>DATE</th>
+        <th style="text-align:right">MISE</th>
+        <th style="text-align:right">PROFIT</th>
+        <th style="text-align:right">ROI</th>
+        <th>STATUT</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for opp in opportunites[-10:]|reverse %}
+      <tr>
+        <td class="bold">{{ opp.evenement }}</td>
+        <td><span class="badge badge-blue">{{ opp.marche }}</span></td>
+        <td class="text-xs text-muted">{{ opp.date }}</td>
+        <td class="text-muted" style="text-align:right">{{ "%.2f €"|format(opp.mise_totale) }}</td>
+        <td class="text-green bold" style="text-align:right">+{{ "%.2f €"|format(opp.profit_eur) }}</td>
+        <td class="text-green" style="text-align:right">+{{ "%.3f"|format(opp.profit_pct) }}%</td>
+        <td>
+          {% if opp.statut == 'gagnee' %}<span class="badge badge-green">Gagnée</span>
+          {% elif opp.statut == 'perdue' %}<span class="badge badge-red">Perdue</span>
+          {% elif opp.statut == 'placee' %}<span class="badge badge-yellow">Placée</span>
+          {% else %}<span class="badge badge-muted">Détectée</span>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if stats.total_opps > 0 %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+const cumul   = {{ cumul|safe }};
+const marches = {{ marches|safe }};
+
+Chart.defaults.color = '#555';
+Chart.defaults.borderColor = '#1a1d35';
+Chart.defaults.font.family = "'IBM Plex Mono', monospace";
+Chart.defaults.font.size   = 10;
+
+// ── Profit cumulé ────────────────────────────────────────────────────────
+new Chart(document.getElementById('chart-profit'), {
+  type: 'line',
+  data: {
+    labels: cumul.map(d => d.date),
+    datasets: [{
+      data:            cumul.map(d => d.profit),
+      borderColor:     '#00e676',
+      backgroundColor: 'rgba(0,230,118,.06)',
+      pointBackgroundColor: '#00e676',
+      pointRadius: cumul.length < 20 ? 4 : 2,
+      fill: true,
+      tension: .35,
+    }]
+  },
+  options: {
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { display: cumul.length < 15, ticks: { maxRotation: 0, maxTicksLimit: 5 } },
+      y: { ticks: { callback: v => v+'€' } },
+    }
+  }
+});
+
+// ── Marchés ──────────────────────────────────────────────────────────────
+const labels = Object.keys(marches);
+const values = Object.values(marches);
+new Chart(document.getElementById('chart-marches'), {
+  type: 'doughnut',
+  data: {
+    labels,
+    datasets: [{
+      data: values,
+      backgroundColor: ['#4f6ef7','#00e676','#ff3d71','#ffd600','#8855ff','#00ccff'],
+      borderColor: '#0d0f1e',
+      borderWidth: 3,
+    }]
+  },
+  options: {
+    plugins: {
+      legend: { position: 'right', labels: { boxWidth: 12, padding: 16 } }
+    }
+  }
+});
+</script>
+{% endif %}
+{% endblock %}

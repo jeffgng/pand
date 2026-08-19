@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% block title %}Historique{% endblock %}
+
+{% block content %}
+<div class="flex-between mb-16">
+  <div>
+    <div class="page-title">Historique</div>
+    <div class="page-sub">{{ opportunites|length }} opportunité{{ 's' if opportunites|length != 1 else '' }} enregistrée{{ 's' if opportunites|length != 1 else '' }}</div>
+  </div>
+  {% if opportunites %}
+  <button class="pill danger" onclick="toutSupprimer()">Tout effacer</button>
+  {% endif %}
+</div>
+
+{% if not opportunites %}
+<div class="card empty-state">
+  <div class="icon">📂</div>
+  <div class="title">AUCUNE OPPORTUNITÉ SAUVEGARDÉE</div>
+  <div class="sub">Calculez une opportunité et sauvegardez-la depuis le Calculateur</div>
+</div>
+
+{% else %}
+
+<!-- Filtres -->
+<div class="card mb-16">
+  <div class="flex gap-8 wrap">
+    <span class="text-xs text-dim" style="align-self:center;margin-right:4px">FILTRER :</span>
+    <button class="pill active" onclick="filtrer('tous',this)">Tous</button>
+    <button class="pill" onclick="filtrer('detectee',this)">Détectée</button>
+    <button class="pill" onclick="filtrer('placee',this)">Placée</button>
+    <button class="pill" onclick="filtrer('gagnee',this)">Gagnée</button>
+    <button class="pill" onclick="filtrer('perdue',this)">Perdue</button>
+    <div class="ml-auto">
+      <input class="inp" id="search" type="text" placeholder="Rechercher un événement..."
+             oninput="rechercher(this.value)"
+             style="width:240px;padding:6px 12px;font-size:11px">
+    </div>
+  </div>
+</div>
+
+<div id="liste">
+{% for opp in opportunites %}
+<div class="card opp-card mb-12 fade-in" data-statut="{{ opp.statut }}"
+     data-event="{{ opp.evenement.lower() }}">
+  <div style="display:grid;grid-template-columns:1fr 120px 120px 100px 160px 36px;
+              gap:16px;align-items:center">
+
+    <!-- Info principale -->
+    <div>
+      <div class="bold mb-4">{{ opp.evenement }}</div>
+      <div class="text-xs text-dim">
+        <span class="badge badge-blue">{{ opp.marche }}</span>
+        {{ opp.date }}
+      </div>
+      <div class="flex gap-12 wrap mt-8">
+        {% for i in range(opp.issues|length) %}
+        <span class="text-xs text-muted">
+          {{ opp.issues[i] }}: <span class="text-sm">{{ "%.2f"|format(opp.cotes[i]) }}</span>
+          <span class="text-dim">({{ opp.bookmakers[i] }})</span>
+        </span>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Mise -->
+    <div>
+      <div class="text-xs text-dim mb-4">MISE</div>
+      <div>{{ "%.2f €"|format(opp.mise_totale) }}</div>
+    </div>
+
+    <!-- Profit -->
+    <div>
+      <div class="text-xs text-dim mb-4">PROFIT NET</div>
+      <div class="text-green bold">+{{ "%.2f €"|format(opp.profit_eur) }}</div>
+    </div>
+
+    <!-- ROI -->
+    <div>
+      <div class="text-xs text-dim mb-4">ROI</div>
+      <div class="text-green">+{{ "%.3f"|format(opp.profit_pct) }}%</div>
+    </div>
+
+    <!-- Statut -->
+    <div>
+      <div class="text-xs text-dim mb-6">STATUT</div>
+      <select class="inp" style="font-size:10px;padding:5px 8px"
+              onchange="changerStatut({{ opp.id }}, this.value)">
+        <option value="detectee"  {{ 'selected' if opp.statut=='detectee' }}>Détectée</option>
+        <option value="placee"    {{ 'selected' if opp.statut=='placee'   }}>Placée</option>
+        <option value="gagnee"    {{ 'selected' if opp.statut=='gagnee'   }}>✓ Gagnée</option>
+        <option value="perdue"    {{ 'selected' if opp.statut=='perdue'   }}>✗ Perdue</option>
+      </select>
+    </div>
+
+    <!-- Supprimer -->
+    <button class="pill danger" style="padding:6px 10px;font-size:14px"
+            onclick="supprimer({{ opp.id }}, this)">✕</button>
+
+  </div>
+</div>
+{% endfor %}
+</div>
+
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+function filtrer(statut, btn) {
+  document.querySelectorAll('.flex .pill').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.opp-card').forEach(card => {
+    card.style.display = (statut === 'tous' || card.dataset.statut === statut) ? 'block' : 'none';
+  });
+}
+
+function rechercher(q) {
+  const lc = q.toLowerCase();
+  document.querySelectorAll('.opp-card').forEach(card => {
+    card.style.display = card.dataset.event.includes(lc) ? 'block' : 'none';
+  });
+}
+
+async function changerStatut(id, statut) {
+  const r = await api(`/api/statut/${id}`, 'POST', {statut});
+  if (r.success) {
+    toast('Statut mis à jour', 'green');
+    // Update data attribute
+    document.querySelector(`.opp-card [onchange*="${id}"]`)
+      ?.closest('.opp-card')?.setAttribute('data-statut', statut);
+  }
+}
+
+async function supprimer(id, btn) {
+  const card = btn.closest('.opp-card');
+  const r = await api(`/api/supprimer/${id}`, 'DELETE');
+  if (r.success) {
+    card.style.animation = 'fadeIn .3s ease reverse';
+    setTimeout(() => card.remove(), 280);
+    toast('Opportunité supprimée', 'green');
+  }
+}
+
+async function toutSupprimer() {
+  if (!confirm('Effacer tout l\'historique ? Cette action est irréversible.')) return;
+  const r = await api('/api/tout-supprimer', 'DELETE');
+  if (r.success) { location.reload(); }
+}
+</script>
+{% endblock %}
