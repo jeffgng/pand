@@ -1,465 +1,658 @@
 {% extends "base.html" %}
-{% block title %}Calculateur{% endblock %}
+{% block title %}ArbPro{% endblock %}
 
 {% block content %}
+<!-- Vue mobile : bottom nav -->
+<div id="mobile-nav" class="mobile-nav">
+  <button class="mnav-btn active" onclick="switchTab('matchs')">
+    <span>⚽</span><span>Matchs</span>
+  </button>
+  <button class="mnav-btn" onclick="switchTab('calc')">
+    <span>🧮</span><span>Calculateur</span>
+  </button>
+  <button class="mnav-btn" onclick="switchTab('books')">
+    <span>📊</span><span>Cotes</span>
+  </button>
+</div>
 
+<!-- ═══ ALERTE API ═══ -->
 {% if not api_configuree %}
-<div style="background:rgba(255,214,0,.08);border:1px solid rgba(255,214,0,.3);
-            border-radius:4px;padding:16px 20px;margin-bottom:20px;
-            display:flex;align-items:center;gap:16px">
-  <span style="font-size:22px">🔑</span>
-  <div>
-    <div style="font-size:12px;font-weight:600;color:var(--yellow);margin-bottom:4px">
-      CLÉ API REQUISE — COTES EN TEMPS RÉEL DÉSACTIVÉES
-    </div>
-    <div style="font-size:11px;color:#aa9900;line-height:1.8">
-      <strong>1)</strong> Va sur
-      <a href="https://the-odds-api.com/" target="_blank" style="color:var(--yellow);text-decoration:underline">
-        the-odds-api.com</a> → inscription gratuite (500 crédits/mois, sans CB) &nbsp;
-      <strong>2)</strong> Copie ta clé API &nbsp;
-      <strong>3)</strong> Dans <code>app.py</code> ligne 20, remplace
-      <code>VOTRE_CLE_API_ICI</code> par ta clé &nbsp;
-      <strong>4)</strong> Redémarre : <code>python app.py</code>
-    </div>
-  </div>
+<div class="api-alert">
+  🔑 <strong>Clé API requise</strong> —
+  <a href="https://the-odds-api.com/" target="_blank">the-odds-api.com</a>
+  → inscription gratuite → configurer dans app.py
 </div>
 {% endif %}
 
 <!-- ═══ COMPÉTITIONS ═══ -->
-<div class="card mb-16">
-  <div class="card-label">COMPÉTITION</div>
-  <div class="flex wrap gap-8">
+<div class="section-leagues">
+  <div class="leagues-scroll">
     {% for key, info in leagues.items() %}
     <a href="/?sport={{ key }}"
-       class="pill {% if sport_actuel == key %}active{% endif %}">
+       class="league-pill {% if sport_actuel == key %}active{% endif %}">
       {{ info.label }}
     </a>
     {% endfor %}
   </div>
 </div>
 
-<div class="grid-calc">
+<!-- ═══ TAB MATCHS ═══ -->
+<div id="tab-matchs" class="tab-content active">
 
-  <!-- ═══ GAUCHE : MATCHS + COTES ═══ -->
-  <div>
-
-    <!-- Header liste matchs -->
-    <div class="card">
-      <div class="flex-between mb-12">
-        <div class="flex-center gap-12">
-          <div class="card-label" style="margin-bottom:0">MATCHS EN DIRECT</div>
-          <span id="arb-badge" class="badge badge-green" style="display:none;animation:pulse 2s infinite"></span>
-        </div>
-        <div class="flex-center gap-10">
-          <!-- Quota API -->
-          <div id="api-quota" style="display:none;font-size:10px;color:var(--dim)"></div>
-          <!-- Countdown refresh -->
-          <div id="refresh-countdown" style="font-size:10px;color:var(--dim)"></div>
-          <button class="pill" id="refresh-btn" onclick="chargerMatchs(true)">⟳ Actualiser</button>
-        </div>
-      </div>
-
-      <!-- Top arbs rapides -->
-      <div id="top-arbs" style="display:none;margin-bottom:14px">
-        <div style="font-size:9px;color:var(--green);letter-spacing:.12em;margin-bottom:6px">
-          ⚡ MEILLEURES OPPORTUNITÉS DU MOMENT
-        </div>
-        <div id="top-arbs-list" class="flex wrap gap-6"></div>
-      </div>
-
-      <!-- Loader -->
-      <div id="matches-loader" style="text-align:center;padding:40px 0">
-        <div style="width:28px;height:28px;border:2px solid var(--border);
-                    border-top-color:var(--blue);border-radius:50%;
-                    animation:spin .8s linear infinite;margin:0 auto 12px"></div>
-        <div class="text-xs text-dim">Récupération des cotes en temps réel...</div>
-      </div>
-
-      <div id="matches-content" style="display:none"></div>
+  <!-- Header -->
+  <div class="matches-header">
+    <div class="flex-center gap-8">
+      <span id="arb-badge" class="arb-badge" style="display:none"></span>
+      <span id="api-credits" class="credits-badge"></span>
     </div>
-
-    <!-- Match sélectionné -->
-    <div class="card mt-12">
-      <div class="card-label">MATCH SÉLECTIONNÉ</div>
-      <input class="inp" id="evenement" type="text"
-             placeholder="Cliquez sur un match pour le sélectionner...">
+    <div class="flex-center gap-8">
+      <span id="countdown" class="countdown"></span>
+      <button class="btn-refresh" onclick="chargerMatchs(true)" id="refresh-btn">⟳</button>
     </div>
-
-    <!-- Marché -->
-    <div class="card mt-12">
-      <div class="card-label">TYPE DE MARCHÉ</div>
-      <div class="flex wrap gap-8" id="market-pills">
-        <button class="pill active" data-market="1X2"
-          data-issues='["Victoire DOM","Nul","Victoire EXT"]' onclick="setMarket(this)">⚽ 1X2</button>
-        <button class="pill" data-market="Double Chance"
-          data-issues='["1X","12","X2"]' onclick="setMarket(this)">🎯 Double Chance</button>
-        <button class="pill" data-market="Over / Under"
-          data-issues='["Over","Under"]' onclick="setMarket(this)">📊 Over/Under</button>
-        <button class="pill" data-market="Handicap"
-          data-issues='["Handicap +","Handicap -"]' onclick="setMarket(this)">⚖️ Handicap</button>
-        <button class="pill" data-market="Personnalisé"
-          data-issues='["Issue 1","Issue 2"]' onclick="setMarket(this)">✏️ Personnalisé</button>
-      </div>
-      <div id="custom-block" style="display:none;margin-top:16px">
-        <div class="card-label mt-8">ISSUES</div>
-        <div id="custom-list"></div>
-        <button class="pill mt-8" onclick="addIssue()">+ Ajouter</button>
-      </div>
-    </div>
-
-    <!-- Cotes calculateur -->
-    <div class="card mt-12">
-      <div class="card-label">COTES À JOUER
-        <span class="text-xs text-dim" style="font-weight:400;margin-left:6px">
-          — meilleures cotes pré-remplies automatiquement
-        </span>
-      </div>
-      <div style="display:grid;grid-template-columns:140px 1fr 170px;gap:6px 10px;margin-bottom:10px">
-        <span class="text-xs text-dim">ISSUE</span>
-        <span class="text-xs text-dim">COTE (modifiable)</span>
-        <span class="text-xs text-dim">BOOKMAKER</span>
-      </div>
-      <div id="cotes-rows"></div>
-    </div>
-
-    <!-- Mise -->
-    <div class="card mt-12">
-      <div class="card-label">CAPITAL À ENGAGER</div>
-      <div class="flex-center gap-12 wrap">
-        <input class="inp inp-lg" id="mise" type="number" value="1000"
-               min="10" step="50" style="width:160px" oninput="compute()">
-        <span class="text-muted">€</span>
-        <div class="flex gap-6 wrap">
-          {% for v in [100,500,1000,2000,5000] %}
-          <button class="pill" onclick="setMise({{ v }})">{{ v }}€</button>
-          {% endfor %}
-        </div>
-      </div>
-    </div>
-
   </div>
 
-  <!-- ═══ DROITE : ANALYSE ═══ -->
-  <div>
+  <!-- Top arbs -->
+  <div id="top-arbs-section" style="display:none">
+    <div class="top-arbs-label">⚡ OPPORTUNITÉS DU MOMENT</div>
+    <div id="top-arbs-list" class="top-arbs-scroll"></div>
+  </div>
 
-    <!-- Tableau détaillé cotes bookmakers -->
-    <div id="panel-books" class="card mb-12" style="display:none">
-      <div class="flex-between mb-10">
-        <div>
-          <div class="card-label" style="margin-bottom:2px">COTES PAR BOOKMAKER</div>
-          <div id="books-match-name" class="text-xs text-muted"></div>
-        </div>
-        <div id="books-nb" class="badge badge-blue"></div>
+  <!-- Loader -->
+  <div id="loader" class="loader-wrap">
+    <div class="spinner"></div>
+    <div class="text-xs text-dim" style="margin-top:10px">Chargement des cotes...</div>
+  </div>
+
+  <!-- Liste matchs -->
+  <div id="matches-list" style="display:none"></div>
+
+</div>
+
+<!-- ═══ TAB CALCULATEUR ═══ -->
+<div id="tab-calc" class="tab-content">
+
+  <!-- Match sélectionné -->
+  <div class="calc-section">
+    <div class="calc-label">MATCH</div>
+    <input class="inp" id="evenement" type="text"
+           placeholder="Sélectionner un match →">
+  </div>
+
+  <!-- Marché -->
+  <div class="calc-section">
+    <div class="calc-label">MARCHÉ</div>
+    <div class="market-grid" id="market-pills">
+      <button class="market-btn active" data-market="1X2"
+        data-issues='["DOM","NUL","EXT"]' onclick="setMarket(this)">⚽ 1X2</button>
+      <button class="market-btn" data-market="Double Chance"
+        data-issues='["1X","12","X2"]' onclick="setMarket(this)">🎯 DC</button>
+      <button class="market-btn" data-market="Over/Under"
+        data-issues='["Over","Under"]' onclick="setMarket(this)">📊 O/U</button>
+      <button class="market-btn" data-market="Handicap"
+        data-issues='["Handi+","Handi-"]' onclick="setMarket(this)">⚖️ HC</button>
+    </div>
+  </div>
+
+  <!-- Cotes -->
+  <div class="calc-section">
+    <div class="calc-label">COTES</div>
+    <div id="cotes-rows"></div>
+  </div>
+
+  <!-- Mise -->
+  <div class="calc-section">
+    <div class="calc-label">MISE TOTALE</div>
+    <div class="mise-row">
+      <input class="inp mise-input" id="mise" type="number"
+             value="1000" min="10" step="50" oninput="compute()">
+      <span class="mise-eur">€</span>
+    </div>
+    <div class="stake-pills">
+      {% for v in [100,500,1000,2000,5000] %}
+      <button class="stake-pill" onclick="setMise({{ v }})">{{ v }}€</button>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Résultat -->
+  <div id="meter-wrap" class="calc-section" style="display:none">
+    <div class="meter-header">
+      <span class="calc-label" style="margin-bottom:0">MARGE</span>
+      <span id="meter-val" class="meter-val"></span>
+    </div>
+    <div class="meter-bar-bg">
+      <div class="meter-bar" id="meter-bar"></div>
+    </div>
+    <div id="meter-status" class="meter-status"></div>
+  </div>
+
+  <!-- ARB détectée -->
+  <div id="result-arb" style="display:none">
+    <div class="arb-result-header">
+      <div class="arb-pulse"></div>
+      <span class="arb-result-title">OPPORTUNITÉ DÉTECTÉE</span>
+    </div>
+    <div class="kpi-row">
+      <div class="kpi-box">
+        <div class="kpi-label">MISE</div>
+        <div id="r-mise" class="kpi-val"></div>
       </div>
-
-      <div id="books-loader" style="text-align:center;padding:16px">
-        <div style="width:20px;height:20px;border:2px solid var(--border);
-                    border-top-color:var(--blue);border-radius:50%;
-                    animation:spin .8s linear infinite;margin:0 auto"></div>
+      <div class="kpi-box">
+        <div class="kpi-label">RETOUR</div>
+        <div id="r-retour" class="kpi-val"></div>
       </div>
-
-      <div id="books-content" style="display:none">
-        <!-- Colonnes issues -->
-        <div style="overflow-x:auto">
-          <table class="data-table" id="books-table" style="font-size:11px;min-width:100%">
-            <thead id="books-thead"></thead>
-            <tbody id="books-tbody"></tbody>
-          </table>
-        </div>
-
-        <!-- Légende -->
-        <div class="flex gap-16 mt-12" style="font-size:10px;color:var(--dim)">
-          <span><span style="color:var(--green)">★</span> Meilleure cote sur cette issue</span>
-          <span><span style="color:var(--blue)">■</span> Bookmaker le moins gourmand</span>
-          <span>Marge &lt; 100% = favorable</span>
-        </div>
+      <div class="kpi-box kpi-green">
+        <div class="kpi-label">PROFIT</div>
+        <div id="r-profit" class="kpi-val text-green"></div>
+      </div>
+      <div class="kpi-box kpi-green">
+        <div class="kpi-label">ROI</div>
+        <div id="r-roi" class="kpi-val text-green"></div>
       </div>
     </div>
 
-    <!-- Indicateur marge -->
-    <div class="card">
-      <div class="card-label">INDICATEUR DE MARGE</div>
-      <div id="meter-empty" class="text-dim text-sm" style="text-align:center;padding:20px 0">
-        Sélectionnez un match pour analyser
-      </div>
-      <div id="meter-content" style="display:none">
-        <div class="flex-between mb-8">
-          <span class="text-xs text-muted">Σ(1/cotes) =</span>
-          <span id="meter-val" class="display" style="font-size:30px">—</span>
-        </div>
-        <div class="meter-bar-bg mb-8">
-          <div class="meter-bar" id="meter-bar" style="width:0%"></div>
-        </div>
-        <div id="meter-status" class="text-xs"></div>
+    <div class="mises-wrap">
+      <div class="calc-label">MISES À PLACER</div>
+      <div id="mises-cards"></div>
+    </div>
+
+    <div class="alert-urgent">
+      ⚡ Placez ces paris <strong>simultanément</strong> — max 2-3 min avant que les cotes changent
+    </div>
+
+    <button class="btn-save" onclick="sauvegarder()">
+      💾 Sauvegarder l'opportunité
+    </button>
+  </div>
+
+  <!-- Pas d'arb -->
+  <div id="result-noarb" class="noarb-box" style="display:none">
+    <div class="noarb-title">✗ PAS D'ARBITRAGE</div>
+    <div id="noarb-detail" class="noarb-detail"></div>
+  </div>
+
+</div>
+
+<!-- ═══ TAB COTES PAR BOOKMAKER ═══ -->
+<div id="tab-books" class="tab-content">
+  <div id="books-empty" class="empty-state">
+    <div style="font-size:36px;margin-bottom:12px">📊</div>
+    <div>Sélectionnez un match<br>pour voir toutes les cotes</div>
+  </div>
+  <div id="books-content" style="display:none">
+    <div class="books-match-name" id="books-match-name"></div>
+
+    <!-- Info bookmakers hors API -->
+    <div class="info-hors-api">
+      <div class="info-hors-api-title">ℹ️ Bookmakers non disponibles dans l'API</div>
+      <div class="info-hors-api-body">
+        Les cotes de <strong>{{ bookmakers_hors_api | join(', ') }}</strong>
+        ne sont pas accessibles via The Odds API. Pour les inclure,
+        entrez leurs cotes manuellement dans le Calculateur.
       </div>
     </div>
 
-    <!-- Résultat ARB -->
-    <div id="result-arb" class="card mt-12"
-         style="display:none;border-color:rgba(0,230,118,.3);background:#001a0a">
-      <div class="flex-center gap-10 mb-16">
-        <div style="width:10px;height:10px;border-radius:50%;background:var(--green);
-                    box-shadow:0 0 16px var(--green);animation:pulse 2s infinite;flex-shrink:0"></div>
-        <div class="display text-green" style="font-size:22px">OPPORTUNITÉ DÉTECTÉE</div>
-      </div>
-
-      <div class="grid-2 mb-16">
-        <div style="background:rgba(255,255,255,.03);padding:14px;border-radius:3px">
-          <div class="text-xs text-dim mb-4">MISE TOTALE</div>
-          <div id="r-mise" class="bold text-lg">—</div>
-        </div>
-        <div style="background:rgba(255,255,255,.03);padding:14px;border-radius:3px">
-          <div class="text-xs text-dim mb-4">RETOUR GARANTI</div>
-          <div id="r-retour" class="bold text-lg">—</div>
-        </div>
-        <div style="background:rgba(0,230,118,.08);padding:14px;border-radius:3px;
-                    border:1px solid rgba(0,230,118,.2)">
-          <div class="text-xs text-dim mb-4">PROFIT NET</div>
-          <div id="r-profit" class="bold text-lg text-green">—</div>
-        </div>
-        <div style="background:rgba(0,230,118,.08);padding:14px;border-radius:3px;
-                    border:1px solid rgba(0,230,118,.2)">
-          <div class="text-xs text-dim mb-4">ROI</div>
-          <div id="r-roi" class="bold text-lg text-green">—</div>
-        </div>
-      </div>
-
-      <div class="card-label">MISES À PLACER PAR BOOKMAKER</div>
-      <table class="data-table" id="mises-table" style="margin-bottom:16px"></table>
-
-      <div class="info-box blue mb-12" style="font-size:11px">
-        ⚡ Placez ces paris <strong>simultanément</strong> — les cotes peuvent changer en 2-3 minutes
-      </div>
-
-      <button class="btn btn-green btn-full" onclick="sauvegarder()">
-        💾 SAUVEGARDER CETTE OPPORTUNITÉ
-      </button>
-    </div>
-
-    <!-- Pas d'arb -->
-    <div id="result-noarb" class="card mt-12"
-         style="display:none;border-color:rgba(255,61,113,.15)">
-      <div class="text-sm text-red mb-10">PAS D'ARBITRAGE SUR CE MARCHÉ</div>
-      <div id="noarb-detail" class="text-xs" style="color:var(--muted);line-height:1.9"></div>
-    </div>
-
-    <!-- Formule -->
-    <div id="result-formula" class="card mt-12" style="display:none">
-      <div class="text-xs text-dim mb-8">VÉRIFICATION — Σ(1/cotes)</div>
-      <div id="formula-text" style="font-size:11px;color:var(--dim);line-height:2.2"></div>
-    </div>
-
+    <div id="books-table-wrap"></div>
   </div>
 </div>
 
 <style>
+/* ══════════════════════════════════════════════
+   MOBILE FIRST — ArbPro v4
+══════════════════════════════════════════════ */
+
+/* Navigation mobile bas de page */
+.mobile-nav {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 200;
+  background: var(--bg2); border-top: 1px solid var(--border);
+  display: flex; height: 60px; safe-area-inset-bottom: env(safe-area-inset-bottom);
+}
+.mnav-btn {
+  flex: 1; background: none; border: none; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 3px; font-family: var(--font);
+  font-size: 9px; color: var(--dim); letter-spacing: .06em;
+  transition: color .15s;
+}
+.mnav-btn span:first-child { font-size: 20px; }
+.mnav-btn.active { color: var(--blue); }
+.mnav-btn.active span:first-child { filter: drop-shadow(0 0 6px var(--blue)); }
+
+/* Tabs */
+.tab-content { display: none; padding-bottom: 80px; }
+.tab-content.active { display: block; }
+
+/* Leagues */
+.section-leagues {
+  background: var(--bg2); border-bottom: 1px solid var(--border);
+  padding: 10px 0;
+}
+.leagues-scroll {
+  display: flex; gap: 8px; overflow-x: auto; padding: 0 16px;
+  scrollbar-width: none;
+}
+.leagues-scroll::-webkit-scrollbar { display: none; }
+.league-pill {
+  flex-shrink: 0; background: transparent; border: 1px solid var(--border);
+  border-radius: 20px; padding: 5px 14px; font-family: var(--font);
+  font-size: 11px; color: var(--muted); white-space: nowrap;
+  transition: all .15s; text-decoration: none;
+}
+.league-pill.active {
+  background: rgba(79,110,247,.15); border-color: var(--blue); color: var(--blue);
+}
+
+/* Matches header */
+.matches-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 12px 16px; border-bottom: 1px solid var(--border);
+}
+.arb-badge {
+  background: var(--green); color: #001a0a; font-size: 10px;
+  font-weight: 700; padding: 3px 10px; border-radius: 20px;
+  letter-spacing: .06em; animation: pulse 2s infinite;
+}
+.credits-badge { font-size: 10px; color: var(--dim); }
+.countdown { font-size: 10px; color: var(--dim); }
+.btn-refresh {
+  background: transparent; border: 1px solid var(--border);
+  color: var(--muted); font-size: 14px; padding: 4px 10px;
+  border-radius: 3px; cursor: pointer; font-family: var(--font);
+}
+
+/* Top arbs */
+.top-arbs-label {
+  font-size: 9px; color: var(--green); letter-spacing: .12em;
+  padding: 8px 16px 4px;
+}
+.top-arbs-scroll {
+  display: flex; gap: 8px; overflow-x: auto; padding: 4px 16px 10px;
+  scrollbar-width: none; border-bottom: 1px solid var(--border);
+}
+.top-arbs-scroll::-webkit-scrollbar { display: none; }
+.top-arb-chip {
+  flex-shrink: 0; background: rgba(0,230,118,.08);
+  border: 1px solid rgba(0,230,118,.3); border-radius: 20px;
+  padding: 5px 12px; font-size: 10px; color: var(--green);
+  cursor: pointer; white-space: nowrap;
+}
+
+/* Loader */
+.loader-wrap { text-align: center; padding: 50px 20px; }
+.spinner {
+  width: 32px; height: 32px; border: 2px solid var(--border);
+  border-top-color: var(--blue); border-radius: 50%;
+  animation: spin .8s linear infinite; margin: 0 auto;
+}
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* ── Match cards ── */
-.date-group  { margin-bottom: 20px; }
-.date-label  {
-  font-size:10px; letter-spacing:.14em; color:var(--blue);
-  padding:6px 0 10px; border-bottom:1px solid var(--border);
-  margin-bottom:8px; display:flex; align-items:center; gap:10px;
+/* Match cards */
+.date-group { }
+.date-label-row {
+  font-size: 10px; color: var(--blue); letter-spacing: .12em;
+  padding: 10px 16px 6px; display: flex; align-items: center; gap: 8px;
+  border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; background: var(--bg); z-index: 10;
 }
+.date-count {
+  background: rgba(79,110,247,.12); color: var(--blue);
+  padding: 1px 8px; border-radius: 10px; font-size: 9px;
+}
+
 .match-card {
-  padding:12px 14px; border:1px solid var(--border); border-radius:3px;
-  margin-bottom:6px; cursor:pointer; background:var(--bg);
-  transition:all .15s; position:relative;
+  padding: 12px 16px; border-bottom: 1px solid var(--border);
+  cursor: pointer; transition: background .12s; position: relative;
+  -webkit-tap-highlight-color: transparent;
 }
-.match-card:hover { border-color:var(--blue); background:rgba(79,110,247,.04); transform:translateX(2px); }
-.match-card.selected { border-color:var(--green); background:rgba(0,230,118,.03); }
-.match-card.has-arb  { border-color:rgba(0,230,118,.5); }
+.match-card:active { background: rgba(79,110,247,.06); }
+.match-card.selected { background: rgba(0,230,118,.04); border-left: 3px solid var(--green); }
+.match-card.has-arb  { border-left: 3px solid var(--green); }
 
-.arb-flag {
-  position:absolute; top:-1px; right:-1px;
-  background:var(--green); color:#001a0a;
-  font-size:9px; font-weight:700; padding:3px 10px;
-  border-radius:0 3px 0 3px; letter-spacing:.08em;
+.match-teams {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
 }
-
-.match-header { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
-.match-home   { font-size:12px; font-weight:600; flex:1; text-align:right; }
-.match-away   { font-size:12px; font-weight:600; flex:1; }
-.match-vs     {
-  font-size:9px; color:var(--dim); letter-spacing:.08em;
-  padding:2px 8px; border:1px solid var(--border);
-  border-radius:2px; flex-shrink:0;
+.team-name { font-size: 13px; font-weight: 600; flex: 1; }
+.team-home { text-align: right; }
+.team-vs {
+  font-size: 9px; color: var(--dim); letter-spacing: .06em;
+  padding: 2px 6px; border: 1px solid var(--border); border-radius: 3px;
+  flex-shrink: 0;
 }
 
-/* Chips de cotes */
-.odds-row { display:flex; justify-content:space-between; align-items:center; }
-.odds-chips { display:flex; gap:6px; }
+.match-bottom {
+  display: flex; justify-content: space-between; align-items: center;
+}
+.match-time-books { font-size: 10px; color: var(--dim); }
+
+.odds-chips { display: flex; gap: 5px; }
 .odd-chip {
-  background:var(--bg3); border:1px solid var(--border);
-  border-radius:2px; padding:5px 10px; min-width:52px; text-align:center;
+  background: var(--bg3); border: 1px solid var(--border);
+  border-radius: 4px; padding: 4px 8px; text-align: center; min-width: 44px;
 }
-.odd-chip-label { font-size:8px; color:var(--dim); display:block; margin-bottom:2px; }
-.odd-chip-val   { font-size:13px; font-weight:600; }
-.odd-chip.arb   { border-color:var(--green); background:rgba(0,230,118,.06); }
-.odd-chip.arb .odd-chip-val { color:var(--green); }
-
-.match-meta { display:flex; align-items:center; gap:8px; }
-.match-time { font-size:10px; color:var(--dim); }
-.match-nb-books { font-size:10px; color:var(--dim); }
+.odd-chip.arb-chip { border-color: var(--green); background: rgba(0,230,118,.06); }
+.odd-label { font-size: 8px; color: var(--dim); display: block; }
+.odd-val { font-size: 12px; font-weight: 600; }
+.odd-chip.arb-chip .odd-val { color: var(--green); }
 .marge-chip {
-  font-size:10px; padding:3px 8px; border-radius:2px;
-  border:1px solid var(--border); min-width:58px; text-align:center;
+  background: var(--bg3); border: 1px solid var(--border);
+  border-radius: 4px; padding: 4px 8px; text-align: center; min-width: 52px;
+}
+.marge-label { font-size: 8px; color: var(--dim); display: block; }
+.marge-val { font-size: 11px; font-weight: 600; }
+
+.arb-flag-card {
+  position: absolute; top: 0; right: 0;
+  background: var(--green); color: #001a0a;
+  font-size: 9px; font-weight: 700; padding: 2px 8px;
+  border-radius: 0 0 0 4px; letter-spacing: .06em;
 }
 
-/* Books table */
-.books-thead-th {
-  padding:8px 10px; font-size:10px; letter-spacing:.08em;
-  font-weight:400; color:var(--dim); border-bottom:1px solid var(--border);
-  text-align:right; white-space:nowrap;
+/* ── Calculateur mobile ── */
+.calc-section {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
 }
-.books-thead-th:first-child { text-align:left; }
-.books-td { padding:9px 10px; border-bottom:1px solid rgba(26,29,53,.5); text-align:right; }
-.books-td:first-child { text-align:left; font-size:11px; }
-.books-td.best-price { color:var(--green); font-weight:700; }
-.books-td.best-price::after { content:' ★'; font-size:9px; }
-.books-row-top td { background:rgba(79,110,247,.06); }
-.books-row-arb td { background:rgba(0,230,118,.04); }
+.calc-label {
+  font-size: 9px; color: var(--dim); letter-spacing: .14em; margin-bottom: 10px;
+}
+.market-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+}
+.market-btn {
+  background: var(--bg3); border: 1px solid var(--border);
+  border-radius: 6px; padding: 10px 8px; font-family: var(--font);
+  font-size: 12px; color: var(--muted); cursor: pointer; transition: all .15s;
+}
+.market-btn.active {
+  background: rgba(79,110,247,.12); border-color: var(--blue); color: var(--blue);
+}
 
-/* Top arbs pills */
-.top-arb-pill {
-  background:rgba(0,230,118,.08); border:1px solid rgba(0,230,118,.3);
-  border-radius:2px; padding:5px 12px; font-size:10px; color:var(--green);
-  cursor:pointer; transition:all .15s;
+/* Cote row mobile */
+.cote-row {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
 }
-.top-arb-pill:hover { background:rgba(0,230,118,.15); }
+.cote-issue {
+  font-size: 11px; color: var(--muted); width: 44px; flex-shrink: 0;
+  text-align: center; line-height: 1.2;
+}
+.cote-input-wrap { flex: 1; position: relative; }
+.cote-input {
+  width: 100%; background: var(--bg); border: 1px solid var(--border);
+  border-radius: 6px; padding: 10px 44px 10px 12px;
+  font-size: 20px; font-weight: 600; color: var(--text);
+  font-family: var(--font); transition: border-color .2s;
+}
+.cote-input:focus { outline: none; border-color: var(--blue); }
+.cote-impl {
+  position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+  font-size: 10px; color: var(--dim); pointer-events: none;
+}
+.cote-book {
+  width: 90px; flex-shrink: 0;
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: 6px; padding: 8px 6px; font-size: 10px;
+  color: var(--muted); font-family: var(--font);
+}
+
+/* Mise */
+.mise-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.mise-input {
+  width: 130px; background: var(--bg); border: 1px solid var(--border);
+  border-radius: 6px; padding: 10px 12px; font-size: 22px; font-weight: 600;
+  color: var(--text); font-family: var(--font);
+}
+.mise-input:focus { outline: none; border-color: var(--blue); }
+.mise-eur { font-size: 18px; color: var(--muted); }
+.stake-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+.stake-pill {
+  background: var(--bg3); border: 1px solid var(--border);
+  border-radius: 20px; padding: 5px 12px; font-size: 11px;
+  color: var(--muted); cursor: pointer; font-family: var(--font);
+}
+
+/* Meter */
+.meter-wrap { }
+.meter-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+.meter-val { font-family: var(--display); font-size: 28px; letter-spacing: .04em; }
+.meter-bar-bg { height: 6px; background: var(--bg); border-radius: 3px; overflow: hidden; margin-bottom: 6px; }
+.meter-bar { height: 100%; border-radius: 3px; transition: width .4s ease, background .4s ease; }
+.meter-status { font-size: 11px; }
+
+/* KPIs */
+.arb-result-header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 16px; background: rgba(0,230,118,.06);
+  border-bottom: 1px solid rgba(0,230,118,.15);
+}
+.arb-pulse {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--green); box-shadow: 0 0 12px var(--green);
+  animation: pulse 2s infinite; flex-shrink: 0;
+}
+.arb-result-title {
+  font-family: var(--display); font-size: 20px; color: var(--green); letter-spacing: .06em;
+}
+.kpi-row {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 1px;
+  background: var(--border); border: 1px solid var(--border);
+}
+.kpi-box {
+  padding: 14px 16px; background: var(--bg3);
+}
+.kpi-green { background: rgba(0,230,118,.05); }
+.kpi-label { font-size: 9px; color: var(--dim); letter-spacing: .1em; margin-bottom: 4px; }
+.kpi-val { font-size: 18px; font-weight: 600; }
+
+/* Mises cards */
+.mises-wrap { padding: 14px 16px; border-top: 1px solid var(--border); }
+.mise-card {
+  background: var(--bg3); border: 1px solid var(--border);
+  border-radius: 6px; padding: 12px 14px; margin-bottom: 8px;
+  display: flex; align-items: center; gap: 12px;
+}
+.mise-card-issue { font-size: 11px; color: var(--muted); flex: 1; }
+.mise-card-book { font-size: 11px; color: var(--blue); }
+.mise-card-cote { font-size: 12px; color: var(--muted); }
+.mise-card-amount { font-size: 20px; font-weight: 700; color: var(--green); margin-left: auto; }
+.mise-card-return { font-size: 10px; color: var(--dim); text-align: right; }
+
+.alert-urgent {
+  margin: 0 16px 12px; padding: 10px 14px;
+  background: rgba(255,214,0,.06); border: 1px solid rgba(255,214,0,.2);
+  border-radius: 6px; font-size: 11px; color: #aa9900; line-height: 1.6;
+}
+.btn-save {
+  width: calc(100% - 32px); margin: 0 16px 16px;
+  background: var(--green); color: #001a0a;
+  border: none; border-radius: 8px; padding: 14px;
+  font-size: 13px; font-weight: 700; font-family: var(--font);
+  letter-spacing: .08em; cursor: pointer;
+}
+
+.noarb-box { padding: 16px; border-top: 1px solid rgba(255,61,113,.2); }
+.noarb-title { font-size: 12px; color: var(--red); margin-bottom: 8px; }
+.noarb-detail { font-size: 11px; color: var(--muted); line-height: 1.8; }
+
+/* ── Tab Cotes ── */
+.empty-state { text-align: center; padding: 60px 20px; color: var(--dim); font-size: 12px; line-height: 1.8; }
+.books-match-name { padding: 12px 16px; font-size: 13px; font-weight: 600; border-bottom: 1px solid var(--border); }
+
+.info-hors-api {
+  margin: 12px 16px; padding: 10px 14px;
+  background: rgba(79,110,247,.06); border: 1px solid rgba(79,110,247,.2);
+  border-radius: 6px;
+}
+.info-hors-api-title { font-size: 10px; color: var(--blue); margin-bottom: 4px; font-weight: 600; }
+.info-hors-api-body  { font-size: 10px; color: var(--muted); line-height: 1.6; }
+
+/* Table cotes bookmakers */
+.books-scroll { overflow-x: auto; margin: 0 16px; }
+.books-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.books-table th {
+  padding: 8px 10px; font-size: 9px; color: var(--dim); letter-spacing: .08em;
+  font-weight: 400; border-bottom: 1px solid var(--border); white-space: nowrap;
+  text-align: right; background: var(--bg2);
+}
+.books-table th:first-child { text-align: left; }
+.books-table td {
+  padding: 10px 10px; border-bottom: 1px solid rgba(26,29,53,.5);
+  text-align: right; white-space: nowrap;
+}
+.books-table td:first-child { text-align: left; }
+.books-table tr.row-top td { background: rgba(79,110,247,.06); }
+.best-price { color: var(--green) !important; font-weight: 700; }
+.best-price::after { content: ' ★'; font-size: 8px; }
+.best-row td { background: rgba(0,230,118,.05); }
+
+/* API alert */
+.api-alert {
+  background: rgba(255,214,0,.08); border-bottom: 1px solid rgba(255,214,0,.2);
+  padding: 10px 16px; font-size: 11px; color: #aa9900; line-height: 1.6;
+}
+.api-alert a { color: var(--yellow); }
+
+/* Desktop override */
+@media (min-width: 768px) {
+  .mobile-nav { display: none; }
+  .tab-content { display: none !important; }
+  .tab-content.active { display: block !important; }
+
+  /* On desktop, show all tabs side by side */
+  #tab-matchs.active, #tab-calc.active, #tab-books.active { display: block !important; }
+
+  .desktop-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 380px;
+    gap: 20px;
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 20px 24px;
+  }
+  .tab-content { padding-bottom: 0; }
+}
 </style>
 {% endblock %}
 
 {% block scripts %}
 <script>
-const SPORT   = "{{ sport_actuel }}";
+const SPORT     = "{{ sport_actuel }}";
 const CACHE_TTL = {{ cache_ttl }};
 
-const BOOKMAKERS_LIST = [
-  'Bet365','Unibet','William Hill','Betfair Exchange','Pinnacle',
-  'Betclic','Bwin','Betway','Coral','Ladbrokes','Sky Bet',
-  'Paddy Power','MarathonBet','888sport','1xBet','Matchbook',
-  'Smarkets','Autre'
+const BOOKS_LIST = [
+  '1xBet','Betway','William Hill','Bwin','Betclic','Unibet','Pinnacle',
+  'Betfair Exch.','Matchbook','Smarkets','Bet365','Coral','Ladbrokes',
+  'Sky Bet','Paddy Power','888Sport','MarathonBet','Autre'
 ];
 
 let state = {
-  market:'1X2', issues:['Victoire DOM','Nul','Victoire EXT'],
-  cotes:[], bookies:[], customIssues:['Issue 1','Issue 2'],
-  currentMatchData: null,
+  market:'1X2', issues:['DOM','NUL','EXT'],
+  cotes:[], bookies:[], currentMatch: null,
 };
-
-let refreshTimer = null;
 let countdownTimer = null;
-let countdownVal = 0;
+
+// ── Tabs mobile ──────────────────────────────────────────────────────────
+function switchTab(tab) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.mnav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-'+tab).classList.add('active');
+  const idx = {'matchs':0,'calc':1,'books':2}[tab];
+  document.querySelectorAll('.mnav-btn')[idx].classList.add('active');
+}
 
 // ── Init ─────────────────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
   syncIssues(state.issues);
   chargerMatchs(false);
+
+  // Desktop : afficher toutes les sections
+  if (window.innerWidth >= 768) {
+    // On laisse le CSS gérer
+  }
 });
 
 // ── Charger matchs ───────────────────────────────────────────────────────
 async function chargerMatchs(force=false) {
-  document.getElementById('matches-loader').style.display = 'block';
-  document.getElementById('matches-content').style.display = 'none';
+  document.getElementById('loader').style.display = 'block';
+  document.getElementById('matches-list').style.display = 'none';
   document.getElementById('arb-badge').style.display = 'none';
-  document.getElementById('top-arbs').style.display = 'none';
+  document.getElementById('top-arbs-section').style.display = 'none';
 
   const r = await api(`/api/matchs/${SPORT}?force=${force}`);
 
-  document.getElementById('matches-loader').style.display = 'none';
-  document.getElementById('matches-content').style.display = 'block';
+  document.getElementById('loader').style.display = 'none';
+  document.getElementById('matches-list').style.display = 'block';
 
   if (r.error === 'api_non_configuree') {
-    document.getElementById('matches-content').innerHTML = `
-      <div style="text-align:center;padding:40px;color:var(--dim)">
-        <div style="font-size:32px;margin-bottom:14px">🔑</div>
-        <div style="font-size:12px;margin-bottom:6px">Clé API non configurée</div>
-        <div style="font-size:11px;color:#1e2240">
-          Inscris-toi sur
-          <a href="https://the-odds-api.com/" target="_blank" style="color:var(--blue)">
-          the-odds-api.com</a> et configure ta clé dans app.py
-        </div>
+    document.getElementById('matches-list').innerHTML = `
+      <div class="empty-state">
+        🔑<br>Configurez votre clé API<br>
+        <a href="https://the-odds-api.com/" target="_blank" style="color:var(--blue)">
+          the-odds-api.com</a>
       </div>`;
     return;
   }
-
   if (r.error) {
-    document.getElementById('matches-content').innerHTML =
-      `<div class="text-red text-sm" style="padding:16px">⚠️ ${r.error}</div>`;
+    document.getElementById('matches-list').innerHTML =
+      `<div class="empty-state text-red">${r.error}</div>`;
     return;
   }
 
-  // Quota API
-  if (r.api_usage?.remaining) {
-    document.getElementById('api-quota').style.display = 'block';
-    document.getElementById('api-quota').textContent =
-      `${r.api_usage.remaining} crédits restants`;
+  // Crédits API
+  if (r.api_info?.remaining && r.api_info.remaining !== '—') {
+    document.getElementById('api-credits').textContent = `${r.api_info.remaining} crédits`;
   }
 
   // Badge arbs
   if (r.total_arbs > 0) {
-    const badge = document.getElementById('arb-badge');
-    badge.textContent = `⚡ ${r.total_arbs} ARB DÉTECTÉE${r.total_arbs>1?'S':''}`;
-    badge.style.display = 'inline-block';
+    const b = document.getElementById('arb-badge');
+    b.textContent = `⚡ ${r.total_arbs} ARB`;
+    b.style.display = 'inline-block';
   }
 
   // Top arbs
   if (r.top_arbs?.length > 0) {
-    document.getElementById('top-arbs').style.display = 'block';
-    document.getElementById('top-arbs-list').innerHTML = r.top_arbs.map(m => `
-      <div class="top-arb-pill" onclick="scrollToMatch('${m.id}')">
-        ${m.home.split(' ').pop()} vs ${m.away.split(' ').pop()}
+    document.getElementById('top-arbs-section').style.display = 'block';
+    document.getElementById('top-arbs-list').innerHTML = r.top_arbs.map(m=>`
+      <div class="top-arb-chip" onclick="goToMatch('${m.id}')">
+        ${shortName(m.home)} vs ${shortName(m.away)}
         <strong>+${m.profit_pct.toFixed(2)}%</strong>
       </div>`).join('');
   }
 
-  // Rendu des groupes
+  // Rendu matchs
   let html = '';
-  for (const [dateLabel, matchs] of Object.entries(r.groupes || {})) {
-    const arbsCount = matchs.filter(m => m.is_arb).length;
+  for (const [label, matchs] of Object.entries(r.groupes||{})) {
+    const arbCount = matchs.filter(m=>m.is_arb).length;
     html += `<div class="date-group">
-      <div class="date-label">
-        ${dateLabel}
-        <span style="background:rgba(79,110,247,.12);color:var(--blue);
-                     padding:1px 8px;border-radius:2px;font-size:10px">
-          ${matchs.length} match${matchs.length>1?'s':''}
-        </span>
-        ${arbsCount > 0 ? `<span style="margin-left:auto;color:var(--green);font-size:10px">
-          ✓ ${arbsCount} arb${arbsCount>1?'s':''}</span>` : ''}
+      <div class="date-label-row">
+        ${label}
+        <span class="date-count">${matchs.length}</span>
+        ${arbCount>0?`<span style="margin-left:auto;color:var(--green);font-size:10px">✓ ${arbCount} arb</span>`:''}
       </div>`;
-
     for (const m of matchs) {
-      const issues  = m.issues || [];
-      const cotes   = m.best_cotes || [];
-      const isArb   = m.is_arb;
-
+      const issues = m.issues||[], cotes = m.best_cotes||[];
       html += `
-      <div class="match-card ${isArb?'has-arb':''}" id="mc-${m.id}"
+      <div class="match-card ${m.is_arb?'has-arb':''}" id="mc-${m.id}"
            onclick="selectionnerMatch(${JSON.stringify(m).replace(/"/g,'&quot;')})">
-        ${isArb ? `<div class="arb-flag">+${m.profit_pct.toFixed(2)}% ARB</div>` : ''}
-
-        <div class="match-header">
-          <span class="match-home">${m.home}</span>
-          <span class="match-vs">VS</span>
-          <span class="match-away">${m.away}</span>
+        ${m.is_arb?`<div class="arb-flag-card">+${m.profit_pct.toFixed(2)}%</div>`:''}
+        <div class="match-teams">
+          <span class="team-name team-home">${m.home}</span>
+          <span class="team-vs">VS</span>
+          <span class="team-name">${m.away}</span>
         </div>
-
-        <div class="odds-row">
-          <div class="match-meta">
-            <span class="match-time">🕐 ${m.heure}</span>
-            <span class="match-nb-books">· ${m.nb_books} bookmakers</span>
-          </div>
+        <div class="match-bottom">
+          <span class="match-time-books">🕐 ${m.heure} · ${m.nb_books} bk</span>
           <div class="odds-chips">
-            ${issues.map((iss, i) => `
-              <div class="odd-chip ${isArb?'arb':''}">
-                <span class="odd-chip-label">${iss.replace('Victoire ','').substring(0,4).toUpperCase()}</span>
-                <span class="odd-chip-val">${(cotes[i]||0).toFixed(2)}</span>
+            ${issues.map((iss,i)=>`
+              <div class="odd-chip ${m.is_arb?'arb-chip':''}">
+                <span class="odd-label">${iss.substring(0,3).toUpperCase()}</span>
+                <span class="odd-val">${(cotes[i]||0).toFixed(2)}</span>
               </div>`).join('')}
-            <div class="marge-chip" style="color:${m.marge<1?'var(--green)':'var(--muted)'}">
-              <span style="display:block;font-size:8px;color:var(--dim);margin-bottom:2px">MARGE</span>
-              ${m.marge_pct.toFixed(1)}%
+            <div class="marge-chip">
+              <span class="marge-label">MARGE</span>
+              <span class="marge-val" style="color:${m.marge<1?'var(--green)':'var(--muted)'}">
+                ${m.marge_pct.toFixed(1)}%
+              </span>
             </div>
           </div>
         </div>
@@ -467,268 +660,210 @@ async function chargerMatchs(force=false) {
     }
     html += '</div>';
   }
+  if (!html) html = `<div class="empty-state">Aucun match disponible</div>`;
+  document.getElementById('matches-list').innerHTML = html;
 
-  if (!html) html = `<div class="empty-state" style="padding:30px 0">
-    <div class="sub">Aucun match disponible pour cette compétition</div></div>`;
-
-  document.getElementById('matches-content').innerHTML = html;
-
-  // Countdown auto-refresh
-  if (!r.from_cache) {
-    startCountdown(CACHE_TTL);
-  } else {
-    startCountdown(r.cache_ttl || 30);
-  }
+  // Countdown
+  startCountdown(r.from_cache ? (r.cache_ttl||60) : CACHE_TTL);
 }
 
-// ── Countdown ────────────────────────────────────────────────────────────
-function startCountdown(seconds) {
+function shortName(n) { return n.split(' ').slice(-1)[0]; }
+
+function goToMatch(id) {
+  const el = document.getElementById('mc-'+id);
+  if (el) { el.scrollIntoView({behavior:'smooth',block:'center'}); }
+}
+
+function startCountdown(sec) {
   clearInterval(countdownTimer);
-  countdownVal = seconds;
-  const el = document.getElementById('refresh-countdown');
-  countdownTimer = setInterval(() => {
-    countdownVal--;
-    if (countdownVal <= 0) {
-      el.textContent = 'Actualisation...';
-      clearInterval(countdownTimer);
-      chargerMatchs(true);
-    } else {
-      el.textContent = `⏱ ${countdownVal}s`;
-    }
+  let v = sec;
+  const el = document.getElementById('countdown');
+  countdownTimer = setInterval(()=>{
+    v--;
+    if (v<=0) { el.textContent=''; clearInterval(countdownTimer); chargerMatchs(true); }
+    else el.textContent = `⏱ ${v}s`;
   }, 1000);
 }
 
-function scrollToMatch(id) {
-  const el = document.getElementById('mc-'+id);
-  if (el) { el.scrollIntoView({behavior:'smooth', block:'center'}); }
-}
-
-// ── Sélectionner un match ────────────────────────────────────────────────
+// ── Sélectionner match ───────────────────────────────────────────────────
 function selectionnerMatch(m) {
-  // Highlight
-  document.querySelectorAll('.match-card').forEach(c => c.classList.remove('selected'));
+  document.querySelectorAll('.match-card').forEach(c=>c.classList.remove('selected'));
   document.getElementById('mc-'+m.id)?.classList.add('selected');
-
-  state.currentMatchData = m;
+  state.currentMatch = m;
   document.getElementById('evenement').value = `${m.home} vs ${m.away}`;
 
   // Pré-remplir cotes
-  state.issues = m.issues || ['Victoire DOM','Nul','Victoire EXT'];
-  state.cotes  = (m.best_cotes || []).map(String);
-  state.bookies = m.best_books || [];
+  state.issues = m.issues||['DOM','NUL','EXT'];
+  state.cotes  = (m.best_cotes||[]).map(String);
+  state.bookies = m.best_books||[];
+  renderCotesRows(); compute();
 
-  // Forcer 1X2
-  document.querySelectorAll('#market-pills .pill').forEach(b => b.classList.remove('active'));
-  document.querySelector('[data-market="1X2"]').classList.add('active');
-  state.market = '1X2';
-  document.getElementById('custom-block').style.display = 'none';
-
-  renderCotesRows();
-  compute();
+  // Tab cotes
   afficherCotesBooks(m);
-  document.getElementById('panel-books').scrollIntoView({behavior:'smooth', block:'nearest'});
+
+  // Mobile : switcher vers calculateur
+  if (window.innerWidth < 768) switchTab('calc');
 }
 
-// ── Tableau cotes par bookmaker ──────────────────────────────────────────
+// ── Cotes bookmakers ─────────────────────────────────────────────────────
 function afficherCotesBooks(m) {
-  const panel = document.getElementById('panel-books');
-  panel.style.display = 'block';
-  document.getElementById('books-loader').style.display = 'block';
-  document.getElementById('books-content').style.display = 'none';
+  const empty   = document.getElementById('books-empty');
+  const content = document.getElementById('books-content');
+  empty.style.display   = 'none';
+  content.style.display = 'block';
   document.getElementById('books-match-name').textContent = `${m.home} vs ${m.away}`;
-  document.getElementById('books-nb').textContent = `${m.nb_books} bookmakers`;
 
-  const issues   = m.issues || [];
-  const allBooks = m.all_books || [];
-
-  // Meilleures cotes par issue
+  const issues   = m.issues||[];
+  const allBooks = m.all_books||[];
   const bestPrices = {};
   for (const book of allBooks) {
-    for (const [iss, price] of Object.entries(book.prices)) {
+    for (const [iss, price] of Object.entries(book.prices||{})) {
       if (!bestPrices[iss] || price > bestPrices[iss]) bestPrices[iss] = price;
     }
   }
+  const margeBest = issues.reduce((s,iss)=>s+(bestPrices[iss]?1/bestPrices[iss]:0),0);
 
-  // Calcul de la "meilleure ligne arb" (meilleures cotes de différents books)
-  const margeBest = issues.reduce((s, iss) => s + (bestPrices[iss] ? 1/bestPrices[iss] : 0), 0);
-  const isGlobalArb = margeBest < 1;
-
-  // En-tête
-  document.getElementById('books-thead').innerHTML = `<tr>
-    <th class="books-thead-th" style="text-align:left">BOOKMAKER</th>
-    ${issues.map(iss => `<th class="books-thead-th">${iss.toUpperCase()}</th>`).join('')}
-    <th class="books-thead-th">MARGE</th>
-  </tr>`;
-
-  // Corps — bookmakers triés par marge
-  let rows = '';
-  allBooks.forEach((book, idx) => {
-    const isTop = idx === 0;
-    rows += `<tr class="${isTop?'books-row-top':''}">
-      <td class="books-td" style="font-weight:${isTop?'600':'400'};color:${isTop?'var(--blue)':'inherit'}">
-        ${isTop?'▶ ':''}${book.name}
+  let rows = allBooks.map((book,idx)=>{
+    const isTop = idx===0;
+    return `<tr class="${isTop?'row-top':''}">
+      <td style="font-weight:${isTop?700:400};color:${isTop?'var(--blue)':'inherit'}">
+        ${book.flag||'🌐'} ${book.name}
       </td>
-      ${issues.map(iss => {
-        const price = book.prices[iss];
-        const isBest = price && price === bestPrices[iss];
-        return `<td class="books-td ${isBest?'best-price':''}">
-          ${price ? price.toFixed(2) : '—'}
-        </td>`;
+      ${issues.map(iss=>{
+        const p = book.prices?.[iss];
+        const isBest = p && p===bestPrices[iss];
+        return `<td class="${isBest?'best-price':''}">${p?p.toFixed(2):'—'}</td>`;
       }).join('')}
-      <td class="books-td" style="color:${book.marge<1?'var(--green)':book.marge<1.05?'var(--yellow)':'var(--muted)'}">
-        ${book.marge_pct.toFixed(2)}%
+      <td style="color:${book.marge<1?'var(--green)':book.marge<1.05?'var(--yellow)':'var(--muted)'}">
+        ${book.marge_pct.toFixed(1)}%
       </td>
     </tr>`;
-  });
+  }).join('');
 
-  // Ligne meilleures cotes
-  rows += `<tr style="border-top:2px solid var(--border);background:rgba(0,230,118,.06)">
-    <td class="books-td" style="color:var(--green);font-weight:700;font-size:11px">
-      ★ MEILLEURES COTES
-    </td>
-    ${issues.map(iss => `<td class="books-td" style="color:var(--green);font-weight:700">
-      ${bestPrices[iss]?.toFixed(2)||'—'}
-    </td>`).join('')}
-    <td class="books-td" style="font-weight:700;color:${isGlobalArb?'var(--green)':'var(--red)'}">
-      ${(margeBest*100).toFixed(2)}%
-      ${isGlobalArb?'<span style="color:var(--green);font-size:9px"> ✓ ARB</span>':''}
+  rows += `<tr class="best-row" style="border-top:2px solid var(--border)">
+    <td style="color:var(--green);font-weight:700">★ MEILLEURES</td>
+    ${issues.map(iss=>`<td style="color:var(--green);font-weight:700">
+      ${bestPrices[iss]?.toFixed(2)||'—'}</td>`).join('')}
+    <td style="font-weight:700;color:${margeBest<1?'var(--green)':'var(--red)'}">
+      ${(margeBest*100).toFixed(1)}%${margeBest<1?' ✓ ARB':''}
     </td>
   </tr>`;
 
-  document.getElementById('books-tbody').innerHTML = rows;
-  document.getElementById('books-loader').style.display = 'none';
-  document.getElementById('books-content').style.display = 'block';
+  document.getElementById('books-table-wrap').innerHTML = `
+    <div class="books-scroll">
+      <table class="books-table">
+        <thead><tr>
+          <th style="text-align:left">BOOKMAKER</th>
+          ${issues.map(i=>`<th>${i.toUpperCase()}</th>`).join('')}
+          <th>MARGE</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
 }
 
 // ── Marché ───────────────────────────────────────────────────────────────
 function setMarket(btn) {
-  document.querySelectorAll('#market-pills .pill').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.market-btn').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
   state.market = btn.dataset.market;
-  const isCustom = state.market === 'Personnalisé';
-  document.getElementById('custom-block').style.display = isCustom ? 'block' : 'none';
-  if (isCustom) { renderCustomList(); syncIssues(state.customIssues); }
-  else syncIssues(JSON.parse(btn.dataset.issues));
+  syncIssues(JSON.parse(btn.dataset.issues));
 }
 
 function syncIssues(issues) {
   state.issues = issues;
   while (state.cotes.length  < issues.length) state.cotes.push('');
   while (state.bookies.length < issues.length)
-    state.bookies.push(BOOKMAKERS_LIST[state.bookies.length % BOOKMAKERS_LIST.length]);
-  state.cotes   = state.cotes.slice(0, issues.length);
-  state.bookies = state.bookies.slice(0, issues.length);
+    state.bookies.push(BOOKS_LIST[state.bookies.length % BOOKS_LIST.length]);
+  state.cotes   = state.cotes.slice(0,issues.length);
+  state.bookies = state.bookies.slice(0,issues.length);
   renderCotesRows(); compute();
 }
 
 function renderCotesRows() {
-  document.getElementById('cotes-rows').innerHTML = state.issues.map((iss, i) => `
-    <div style="display:grid;grid-template-columns:140px 1fr 170px;
-                gap:6px 10px;margin-bottom:8px;align-items:center">
-      <div class="text-sm text-muted" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
-        ${iss}
+  document.getElementById('cotes-rows').innerHTML = state.issues.map((iss,i)=>`
+    <div class="cote-row">
+      <div class="cote-issue">${iss}</div>
+      <div class="cote-input-wrap">
+        <input class="cote-input" type="number" step="0.01" min="1.01"
+          placeholder="—" value="${state.cotes[i]||''}"
+          inputmode="decimal"
+          oninput="state.cotes[${i}]=this.value;updateImpl(${i},this.value);compute()">
+        <span class="cote-impl" id="impl-${i}"></span>
       </div>
-      <div style="position:relative">
-        <input class="inp" type="number" step="0.01" min="1.01" placeholder="—"
-          value="${state.cotes[i]||''}"
-          oninput="state.cotes[${i}]=this.value;updateImpl(${i},this.value);compute()"
-          style="font-size:20px;font-weight:600;padding-right:54px">
-        <span id="impl-${i}" style="position:absolute;right:10px;top:50%;
-          transform:translateY(-50%);font-size:10px;color:var(--dim);pointer-events:none"></span>
-      </div>
-      <select class="inp" style="font-size:11px" onchange="state.bookies[${i}]=this.value">
-        ${BOOKMAKERS_LIST.map(b=>`<option ${state.bookies[i]===b?'selected':''}>${b}</option>`).join('')}
+      <select class="cote-book" onchange="state.bookies[${i}]=this.value">
+        ${BOOKS_LIST.map(b=>`<option ${state.bookies[i]===b?'selected':''}>${b}</option>`).join('')}
       </select>
     </div>`).join('');
-  state.issues.forEach((_,i) => updateImpl(i, state.cotes[i]));
+  state.issues.forEach((_,i)=>updateImpl(i,state.cotes[i]));
 }
 
-function updateImpl(i, v) {
+function updateImpl(i,v) {
   const el = document.getElementById('impl-'+i);
-  if (el) el.textContent = Number(v)>1 ? (100/Number(v)).toFixed(1)+'%' : '';
+  if (el) el.textContent = Number(v)>1?(100/Number(v)).toFixed(1)+'%':'';
 }
 
-function renderCustomList() {
-  document.getElementById('custom-list').innerHTML = state.customIssues.map((iss,i) => `
-    <div class="flex gap-8 mb-8">
-      <input class="inp" value="${iss}"
-        oninput="state.customIssues[${i}]=this.value;syncIssues(state.customIssues)">
-      ${state.customIssues.length>2?`<button class="pill danger" onclick="removeIssue(${i})">✕</button>`:''}
-    </div>`).join('');
-}
-function addIssue() {
-  state.customIssues.push('Issue '+(state.customIssues.length+1));
-  renderCustomList(); syncIssues(state.customIssues);
-}
-function removeIssue(i) {
-  state.customIssues.splice(i,1); state.cotes.splice(i,1); state.bookies.splice(i,1);
-  renderCustomList(); syncIssues(state.customIssues);
-}
 function setMise(v) { document.getElementById('mise').value=v; compute(); }
 
 // ── Calcul ───────────────────────────────────────────────────────────────
-let debounceTimer;
-function compute() { clearTimeout(debounceTimer); debounceTimer=setTimeout(_compute, 80); }
+let dt;
+function compute() { clearTimeout(dt); dt=setTimeout(_compute,80); }
 
 async function _compute() {
   const cotes = state.cotes.map(Number).filter(c=>c>1);
   const mise  = Number(document.getElementById('mise').value)||0;
-  const allOk = cotes.length===state.issues.length && mise>0;
+  const ok    = cotes.length===state.issues.length && mise>0;
 
-  document.getElementById('meter-empty').style.display   = allOk?'none':'block';
-  document.getElementById('meter-content').style.display = allOk?'block':'none';
-  if (!allOk) {
-    ['result-arb','result-noarb','result-formula'].forEach(id=>
-      document.getElementById(id).style.display='none');
+  const mw = document.getElementById('meter-wrap');
+  mw.style.display = ok ? 'block' : 'none';
+  if (!ok) {
+    document.getElementById('result-arb').style.display  = 'none';
+    document.getElementById('result-noarb').style.display = 'none';
     return;
   }
 
   const r = await api('/api/calculer','POST',{cotes,mise});
-  if (!r || r.error) return;
+  if (!r||r.error) return;
 
-  // Meter
-  document.getElementById('meter-val').textContent  = (r.marge*100).toFixed(4)+'%';
-  document.getElementById('meter-val').style.color  = r.is_arb?'var(--green)':'var(--red)';
-  document.getElementById('meter-bar').style.width  = Math.min(r.marge*100,115)+'%';
+  mw.classList.add('calc-section');
+  document.getElementById('meter-val').textContent = (r.marge*100).toFixed(4)+'%';
+  document.getElementById('meter-val').style.color = r.is_arb?'var(--green)':'var(--red)';
+  document.getElementById('meter-bar').style.width = Math.min(r.marge*100,115)+'%';
   document.getElementById('meter-bar').style.background = r.is_arb
     ? 'linear-gradient(90deg,#00e676,#69ff9e)'
     : 'linear-gradient(90deg,#ff3d71,#ff7a9a)';
   const st = document.getElementById('meter-status');
   st.style.color = r.is_arb?'var(--green)':'var(--red)';
   st.textContent = r.is_arb
-    ? `✓ ARBITRAGE — profit garanti +${r.profit_pct.toFixed(3)}% quelle que soit l'issue`
-    : `✗ PAS D'ARBITRAGE — marge résiduelle +${((r.marge-1)*100).toFixed(4)}%`;
-
-  // Formule
-  document.getElementById('result-formula').style.display = 'block';
-  document.getElementById('formula-text').innerHTML =
-    cotes.map((c,i)=>`<span style="color:#2a3050"> 1/${c.toFixed(2)} </span>${i<cotes.length-1?'<span style="color:#1a1d30"> + </span>':''}`).join('') +
-    ` = <span style="color:${r.is_arb?'var(--green)':'var(--red)'};font-weight:700">${r.marge.toFixed(6)}</span>` +
-    `<span style="opacity:.4;color:${r.is_arb?'var(--green)':'var(--red)'}">${r.is_arb?' < 1 ✓':' ≥ 1 ✗'}</span>`;
+    ? `✓ Profit garanti : +${r.profit_pct.toFixed(3)}%`
+    : `✗ Pas d'arb — marge : +${((r.marge-1)*100).toFixed(4)}%`;
 
   if (r.is_arb) {
     document.getElementById('result-arb').style.display  = 'block';
     document.getElementById('result-noarb').style.display = 'none';
-    document.getElementById('r-mise').textContent    = fmtEur(mise);
-    document.getElementById('r-retour').textContent  = fmtEur(r.retour_garanti);
-    document.getElementById('r-profit').textContent  = fmtEur(r.profit_eur);
-    document.getElementById('r-roi').textContent     = '+'+r.profit_pct.toFixed(3)+'%';
-    document.getElementById('mises-table').innerHTML = state.issues.map((iss,i)=>`
-      <tr>
-        <td class="text-muted text-xs">${iss}</td>
-        <td style="color:var(--blue);font-size:11px">${state.bookies[i]||'—'}</td>
-        <td class="text-muted" style="text-align:right">× ${cotes[i].toFixed(2)}</td>
-        <td class="text-green bold" style="text-align:right;font-size:14px">${fmtEur(r.mises[i].mise)}</td>
-        <td class="text-dim text-xs" style="text-align:right">→ ${fmtEur(r.mises[i].retour)}</td>
-      </tr>`).join('');
+    document.getElementById('r-mise').textContent   = fmtEur(mise);
+    document.getElementById('r-retour').textContent = fmtEur(r.retour_garanti);
+    document.getElementById('r-profit').textContent = fmtEur(r.profit_eur);
+    document.getElementById('r-roi').textContent    = '+'+r.profit_pct.toFixed(3)+'%';
+    document.getElementById('mises-cards').innerHTML = state.issues.map((iss,i)=>`
+      <div class="mise-card">
+        <div>
+          <div class="mise-card-issue">${iss}</div>
+          <div class="mise-card-book">${state.bookies[i]||'—'}</div>
+          <div class="mise-card-cote">× ${cotes[i].toFixed(2)}</div>
+        </div>
+        <div style="text-align:right">
+          <div class="mise-card-amount">${fmtEur(r.mises[i].mise)}</div>
+          <div class="mise-card-return">→ ${fmtEur(r.mises[i].retour)}</div>
+        </div>
+      </div>`).join('');
   } else {
     document.getElementById('result-arb').style.display  = 'none';
     document.getElementById('result-noarb').style.display = 'block';
     document.getElementById('noarb-detail').innerHTML =
-      `Marge combinée : <span style="color:var(--red)">${((r.marge-1)*100).toFixed(3)}%</span> au-dessus du seuil<br>` +
-      `Cotes minimales requises pour créer une arb :<br>` +
+      `Marge : <span style="color:var(--red)">${((r.marge-1)*100).toFixed(3)}%</span> au-dessus du seuil<br>` +
       state.issues.map((iss,i)=>
-        `<span style="color:var(--muted)">→ ${iss} : ${cotes[i].toFixed(2)} actuellement → besoin de <span style="color:var(--blue)">${r.cotes_cibles[i]}</span></span>`
+        `→ ${iss} : ${cotes[i].toFixed(2)} (besoin : <span style="color:var(--blue)">${r.cotes_cibles[i]}</span>)`
       ).join('<br>');
   }
 }
@@ -736,17 +871,17 @@ async function _compute() {
 // ── Sauvegarder ──────────────────────────────────────────────────────────
 async function sauvegarder() {
   const r = await api('/api/sauvegarder','POST',{
-    evenement: document.getElementById('evenement').value || 'Match sans nom',
+    evenement: document.getElementById('evenement').value||'Match sans nom',
     marche: state.market, issues: state.issues,
     cotes: state.cotes.map(Number),
     mise: Number(document.getElementById('mise').value),
     bookmakers: state.bookies,
   });
   if (r.success) {
-    toast('✓ Opportunité sauvegardée !','green');
-    const btn = document.querySelector('#result-arb .btn-green');
+    toast('✓ Sauvegardé !','green');
+    const btn = document.querySelector('.btn-save');
     btn.textContent = '✓ SAUVEGARDÉE';
-    setTimeout(()=>btn.textContent='💾 SAUVEGARDER CETTE OPPORTUNITÉ', 2500);
+    setTimeout(()=>btn.textContent='💾 Sauvegarder l\'opportunité', 2000);
   } else toast('Erreur : '+r.error,'red');
 }
 
